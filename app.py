@@ -208,6 +208,9 @@ app.layout = html.Div(
     children=[
         html.H1("Mortgage Payment Analysis", style={'textAlign': 'center', 'color': '#fff'}),
         html.Hr(),
+        dcc.Slider(5, 30, 5, 
+                   value=25,
+                   id='tenor-slider'),
         # RadioItems for shock type selection
         dcc.RadioItems(
             options=[
@@ -232,9 +235,12 @@ app.layout = html.Div(
 # Callback to update the graph and table based on the selected shock type
 @app.callback(
     Output('payment-graph', 'figure'),
-    [Input('shock-type', 'value')]
+    [
+        Input('shock-type', 'value'),
+        Input('tenor-slider', 'value')
+    ]
 )
-def update_graph(shock_type):
+def update_graph(shock_type, tenor):
 
     euro_rates = load_base_rate()
     base_rate = yield_series(euro_rates)
@@ -242,33 +248,41 @@ def update_graph(shock_type):
     if shock_type != 'base case':
         rate = apply_irrbb_shocks(base_rate, shock_type, use_smoothing=True)
     # Calculate the payments for the two amortization methods
-    ca = pay_debt(100000, rate[:25] / 100, 'constant amortization')
-    an = pay_debt(100000, rate[:25] / 100, 'annuity')
+    ca = pay_debt(100000, rate[:tenor] / 100, 'constant amortization')
+    an = pay_debt(100000, rate[:tenor] / 100, 'annuity')
     # This is just an example, you'll replace this with your actual data
     fig = go.Figure()
 
     # Use ca.index instead of 'period'
     fig.add_trace(go.Scatter(
-        x=ca.index, y=ca['principal payment'] + ca['interest payment'],
-        mode='lines', name='Constant amortization'
+        x=ca.index,
+        y=ca['principal payment'] + ca['interest payment'],
+        mode='lines',
+        name='Constant amortization'
     ))
     
     fig.add_trace(go.Scatter(
-        x=an.index, y=an['principal payment'] + an['interest payment'],
-        mode='lines', name='Annuity'
+        x=an.index,
+        y=an['principal payment'] + an['interest payment'],
+        mode='lines',
+        name='Annuity'
     ))
 
     # Update the layout to have dark theme
     fig.update_layout(
         title=f"Payments with {shock_type} Shock",
-        xaxis_title="Period",
+        xaxis={
+            'tickvals': [i * 12 for i in range(1, tenor + 1)],  # Monthly indices for each year
+            'ticktext': [f"Y+{i}" for i in range(1, tenor + 1)],  # Labels as "Y+1", "Y+2", ...
+            'title': 'Year'
+        },
         yaxis_title="Payment Amount",
         plot_bgcolor='rgb(30, 30, 30)',
         paper_bgcolor='rgb(30, 30, 30)',
         font=dict(color='white'),
-        template='plotly_dark',  # Dark theme for Plotly
+        template='plotly_dark',
         margin=dict(t=20, b=40, l=40, r=40),
-        height=600  # Set height of the plot
+        height=600
     )
 
     return fig
