@@ -202,6 +202,7 @@ def pay_debt(principal, interest_rates, payment_type):
 
 # Initialize the Dash app
 app = Dash(__name__)
+server = app.server
 
 app.layout = html.Div(
     children=[
