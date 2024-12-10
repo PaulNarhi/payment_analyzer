@@ -369,7 +369,7 @@ def update_graphs(graph_type, shock_type, tenor, use_smoothing):
         name='Annuity'
     ))
     payment_fig.update_layout(
-        title=f"Payments with {shock_type} Shock",
+        title=f"Monthly payments with {shock_type} interest rates",
         xaxis={
             'tickvals': [i * 12 for i in range(1, tenor + 1)],  # Monthly indices for each year
             'ticktext': [f"Y+{i}" for i in range(1, tenor + 1)],  # Labels as "Y+1", "Y+2", ...
@@ -380,7 +380,7 @@ def update_graphs(graph_type, shock_type, tenor, use_smoothing):
         paper_bgcolor='rgb(30, 30, 30)',
         font=dict(color='white'),
         template='plotly_dark',
-        margin=dict(t=20, b=40, l=40, r=40),
+        margin=dict(t=40, b=40, l=40, r=40),
         height=600
     )
 
@@ -400,7 +400,7 @@ def update_graphs(graph_type, shock_type, tenor, use_smoothing):
         paper_bgcolor='rgb(30, 30, 30)',
         font=dict(color='white'),
         template='plotly_dark',
-        margin=dict(t=20, b=40, l=40, r=40),
+        margin=dict(t=40, b=40, l=40, r=40),
         height=600
     )
 
