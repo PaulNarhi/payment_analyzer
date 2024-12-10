@@ -11,6 +11,10 @@ import dash
 from dash import Dash, html, dcc, callback, Output, Input
 import plotly.graph_objs as go
 from dash import dash_table
+import dash_bootstrap_components as dbc
+from dash_bootstrap_templates import load_figure_template
+
+load_figure_template(["cyborg", "darkly"])
 
 memory = Memory("cachedir")
 
@@ -201,75 +205,170 @@ def pay_debt(principal, interest_rates, payment_type):
     return df
 
 # Initialize the Dash app
-app = Dash(__name__)
+app = Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
 server = app.server
 
 app.layout = html.Div(
     children=[
-        html.H1("Mortgage Payment Analysis", style={'textAlign': 'center', 'color': '#fff'}),
+        html.H1("Mortgage Payment Analysis", style={'textAlign': 'center'}),
         html.Hr(),
-        dcc.Slider(5, 30, 5, 
-                   value=25,
-                   id='tenor-slider'),
-        # RadioItems for shock type selection
-        dcc.RadioItems(
-            options=[
-                {'label': 'Base Case', 'value': 'base case'},
-                {'label': 'Parallel up', 'value': 'parallel up'},
-                {'label': 'Parallel down', 'value': 'parallel down'},
-                {'label': 'Steepen', 'value': 'steepen'},
-                {'label': 'Flatten', 'value': 'flatten'},
-                {'label': 'Short rates up', 'value': 'short rates up'},
-                {'label': 'Short rates down', 'value': 'short rates down'},
+        # Row for loan amount, down payment, and tenor slider
+        html.Div(
+            children=[
+                # Loan Amount Header and Input
+                html.Div(
+                    children=[
+                        html.H3("Loan Amount", style={'marginBottom': '10px', 'fontSize': '20px'}),
+                        dcc.Input(
+                            id='loan-amount',
+                            type='number',
+                            value=100000,
+                            placeholder="Loan Amount",
+                            style={'width': '100%', 'padding': '5px'}
+                        ),
+                    ],
+                    style={'flex': '1', 'padding': '0 10px', 'maxWidth': '300px'}
+                ),
+                # Down Payment Header and Input
+                html.Div(
+                    children=[
+                        html.H3("Down Payment", style={'marginBottom': '10px', 'fontSize': '20px'}),
+                        dcc.Input(
+                            id='down-payment',
+                            type='number',
+                            value=20000,
+                            placeholder="Down Payment",
+                            style={'width': '100%', 'padding': '5px'}
+                        ),
+                    ],
+                    style={'flex': '1', 'padding': '0 10px', 'maxWidth': '300px'}
+                ),
+                # Tenor Slider Header and Slider
+                html.Div(
+                    children=[
+                        html.H3("Loan Tenor (Years)", style={'marginBottom': '10px', 'fontSize': '25px'}),
+                        dcc.Slider(
+                            5, 30, 5,
+                            value=25,
+                            id='tenor-slider',
+                        ),
+                    ],
+                    style={'flex': '1', 'padding': '0 10px'}
+                ),
             ],
-            value='base case',
-            id='shock-type',
-            style={'color': '#fff'}
+            style={'display': 'flex', 'alignItems': 'center', 'marginBottom': '20px'}
         ),
-        # Graph for plotting payments
-        dcc.Graph(id='payment-graph', style={'height': '600px'}),
+        # Shock Type Header and Radio Items
+        html.Div(
+            children=[
+                html.H3("Interest Rate Shock Type", style={'marginBottom': '10px', 'fontSize': '20px'}),
+                dcc.RadioItems(
+                    options=[
+                        {'label': 'Base Case', 'value': 'base case'},
+                        {'label': 'Parallel up', 'value': 'parallel up'},
+                        {'label': 'Parallel down', 'value': 'parallel down'},
+                        {'label': 'Steepen', 'value': 'steepen'},
+                        {'label': 'Flatten', 'value': 'flatten'},
+                        {'label': 'Short rates up', 'value': 'short rates up'},
+                        {'label': 'Short rates down', 'value': 'short rates down'},
+                    ],
+                    value='base case',
+                    id='shock-type',
+                    style={'display': 'block'}
+                ),
+            ],
+            style={'marginBottom': '20px'}
+        ),
+        # Graph Type Dropdown Header
+        html.Div(
+            children=[
+                html.H3("Select Graph Type", style={'marginBottom': '10px', 'fontSize': '20px'}),
+                dcc.Dropdown(
+                    options=[
+                        {'label': 'Monthly payments', 'value': 'payment'},
+                        {'label': 'Interest Rate', 'value': 'interest rate'}
+                    ],
+                    value='payment',
+                    id='graph-selector',
+                    style={
+                        'width': '200px',  # Set the width of the dropdown
+                        'height': '50px',
+                        'margin': '0',  # Align to the left by removing auto margin
+                        'color': 'black',
+                        'fontSize': '16px',  # Adjust font size
+                        'padding': '5px',  # Padding for better alignment
+                    },
+                    clearable=False
+                ),
+            ],
+            style={'width': 'auto', 'marginBottom': '20px'}
+        ),
+        # Use Smoothing Checkbox
+        html.Div(
+            children=[
+                html.H3("Use interest rate smoothing", style={'marginBottom': '10px', 'fontSize': '20px'}),
+                dcc.Checklist(
+                    options=[
+                        {'label': 'Enable Smoothing', 'value': 'smooth'}
+                    ],
+                    value=[],  # Default to no smoothing
+                    id='use-smoothing',
+                    inline=True,
+                    style={'fontSize': '14px'}
+                ),
+            ],
+            style={'marginBottom': '20px'}
+        ),
+        # Graphs for displaying results
+        dcc.Graph(id='payment-graph'),
+        dcc.Graph(id='interest-rate-graph', style={'display': 'none'}),  # Initially hidden
     ],
-    style={'backgroundColor': '#333', 'padding': '20px'}
+    style={'padding': '20px'}
 )
 
-# Callback to update the graph and table based on the selected shock type
 @app.callback(
     Output('payment-graph', 'figure'),
+    Output('interest-rate-graph', 'figure'),
+    Output('payment-graph', 'style'),
+    Output('interest-rate-graph', 'style'),
     [
+        Input('graph-selector', 'value'),
         Input('shock-type', 'value'),
-        Input('tenor-slider', 'value')
+        Input('tenor-slider', 'value'),
+        Input('use-smoothing', 'value')  # New input for use_smoothing
     ]
 )
-def update_graph(shock_type, tenor):
-
+def update_graphs(graph_type, shock_type, tenor, use_smoothing):
+    # Load rate data
     euro_rates = load_base_rate()
     base_rate = yield_series(euro_rates)
     rate = base_rate
+    
     if shock_type != 'base case':
-        rate = apply_irrbb_shocks(base_rate, shock_type, use_smoothing=True)
-    # Calculate the payments for the two amortization methods
+        if 'smooth' in use_smoothing:
+            rate = apply_irrbb_shocks(base_rate, shock_type, use_smoothing=True)
+        else:
+            rate = apply_irrbb_shocks(base_rate, shock_type, use_smoothing=False)
+    
+    # Apply smoothing if enabled
+
+    # Payment Analysis Graph
     ca = pay_debt(100000, rate[:tenor] / 100, 'constant amortization')
     an = pay_debt(100000, rate[:tenor] / 100, 'annuity')
-    # This is just an example, you'll replace this with your actual data
-    fig = go.Figure()
-
-    # Use ca.index instead of 'period'
-    fig.add_trace(go.Scatter(
+    payment_fig = go.Figure()
+    payment_fig.add_trace(go.Scatter(
         x=ca.index,
         y=ca['principal payment'] + ca['interest payment'],
         mode='lines',
         name='Constant amortization'
     ))
-    
-    fig.add_trace(go.Scatter(
+    payment_fig.add_trace(go.Scatter(
         x=an.index,
         y=an['principal payment'] + an['interest payment'],
         mode='lines',
         name='Annuity'
     ))
-
-    # Update the layout to have dark theme
-    fig.update_layout(
+    payment_fig.update_layout(
         title=f"Payments with {shock_type} Shock",
         xaxis={
             'tickvals': [i * 12 for i in range(1, tenor + 1)],  # Monthly indices for each year
@@ -285,7 +384,31 @@ def update_graph(shock_type, tenor):
         height=600
     )
 
-    return fig
+    # Interest Rate Graph
+    rate_fig = go.Figure()
+    rate_fig.add_trace(go.Scatter(
+        x=rate.index[:tenor],
+        y=rate[:tenor],
+        mode='lines',
+        name='Interest Rate'
+    ))
+    rate_fig.update_layout(
+        title="Selected Interest Rate Over Time",
+        xaxis_title="Period",
+        yaxis_title="Rate (%)",
+        plot_bgcolor='rgb(30, 30, 30)',
+        paper_bgcolor='rgb(30, 30, 30)',
+        font=dict(color='white'),
+        template='plotly_dark',
+        margin=dict(t=20, b=40, l=40, r=40),
+        height=600
+    )
+
+    # Toggle between graphs
+    if graph_type == 'payment':
+        return payment_fig, rate_fig, {'display': 'block'}, {'display': 'none'}
+    else:
+        return payment_fig, rate_fig, {'display': 'none'}, {'display': 'block'}
 
 # Run the app
 if __name__ == '__main__':
