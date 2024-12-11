@@ -508,21 +508,21 @@ def update_graphs(graph_type, shock_type, tenor, use_smoothing):
 
     # prepayment data
 
-    pre = calculate_prepayment_value(100000, (rate[:tenor])/100, 'annuity', 1)
-    pre2 = calculate_prepayment_value(100000, (rate[:tenor])/100, 'constant amortization', 1)
+    pre = calculate_prepayment_value(100000, (rate[:tenor])/100, 'constant amortization', 1)
+    pre2 = calculate_prepayment_value(100000, (rate[:tenor])/100, 'annuity', 1)
 
     prepayment_fig = go.Figure()
     prepayment_fig.add_trace(go.Scatter(
         x=rate.index[:tenor-1],
         y=pre[:-1],
         mode='lines',
-        name='Interest Rate'
+        name='Constant amortization'
     ))
     prepayment_fig.add_trace(go.Scatter(
         x=rate.index[:tenor-1],
         y=pre2[:-1],
         mode='lines',
-        name='Interest Rate'
+        name='Annuity'
     ))
     prepayment_fig.update_layout(
         title="Effect of 1€ paid on total loan cost per period",
