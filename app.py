@@ -158,6 +158,102 @@ def pay_debt_annuity(principal, annual_rate, years_left):
         #print(fmt.format(payment, ppmt[index], ipmt[index], remaining_principal))
     return pd.DataFrame(rows, columns=['principal payment', 'interest payment', 'remaining principal'])
 
+def calculate_prepayment_value(principal, interest_rates, payment_type, prepayment):
+    """
+    Main function to calculate the effect of prepayment on loan costs.
+
+    Args:
+        principal (float): The total principal of the loan.
+        interest_rates (list of floats): List of annual interest rates for each period.
+        payment_type (str): Either 'annuity' or 'constant amortization'.
+        prepayment (float): Amount of prepayment to apply.
+
+    Returns:
+        np.array: Difference in total payments between no prepayment and prepayment.
+    """
+    maturity = len(interest_rates)
+    no_prepayment = calculate_no_prepayment(principal, interest_rates, payment_type, maturity)
+    prepayment_effect_by_year = calculate_prepayment_effect(principal, interest_rates, payment_type, prepayment, maturity)
+    return np.array(no_prepayment) - np.array(prepayment_effect_by_year)
+
+def calculate_no_prepayment(principal, interest_rates, payment_type, maturity):
+    """
+    Calculate total payments without prepayment.
+
+    Args:
+        principal (float): Total principal.
+        interest_rates (list of floats): Interest rates.
+        payment_type (str): Payment type ('annuity' or 'constant amortization').
+        maturity (int): Total number of periods.
+
+    Returns:
+        list: Total payments for no prepayment.
+    """
+    no_prepayment = []
+    for _ in range(maturity, 0, -1):
+        principal_left = principal
+        payment = []
+        for rate, years_left in zip(interest_rates, range(maturity, 0, -1)):
+            total_payment, principal_left = calculate_period_payment(
+                principal_left, rate, years_left, payment_type, 0
+            )
+            payment.append(total_payment)
+        no_prepayment.append(sum(payment))
+    return no_prepayment
+
+def calculate_prepayment_effect(principal, interest_rates, payment_type, prepayment, maturity):
+    """
+    Calculate total payments with prepayment.
+
+    Args:
+        principal (float): Total principal.
+        interest_rates (list of floats): Interest rates.
+        payment_type (str): Payment type ('annuity' or 'constant amortization').
+        prepayment (float): Prepayment amount.
+        maturity (int): Total number of periods.
+
+    Returns:
+        list: Total payments for each year with prepayment.
+    """
+    prepayment_effect_by_year = []
+    for i in range(maturity, 0, -1):
+        principal_left = principal
+        payment = []
+        for rate, years_left in zip(interest_rates, range(maturity, 0, -1)):
+            pay = prepayment if years_left == i else 0
+            total_payment, principal_left = calculate_period_payment(
+                principal_left, rate, years_left, payment_type, pay
+            )
+            payment.append(total_payment)
+        prepayment_effect_by_year.append(sum(payment))
+    return prepayment_effect_by_year
+
+def calculate_period_payment(principal_left, rate, years_left, payment_type, prepayment):
+    """
+    Calculate the total payment for a single period.
+
+    Args:
+        principal_left (float): Remaining principal.
+        rate (float): Interest rate for the period.
+        years_left (int): Number of years remaining.
+        payment_type (str): Payment type ('annuity' or 'constant amortization').
+        prepayment (float): Prepayment amount.
+
+    Returns:
+        tuple: Total payment for the period and updated remaining principal.
+    """
+    if payment_type == 'annuity':
+        df = pay_debt_annuity(principal_left - prepayment, rate, years_left=years_left)
+    elif payment_type == 'constant amortization':
+        payment = principal_left / (12 * years_left)
+        df = pay_debt_constant_amortization(payment, principal_left - prepayment, rate)
+    else:
+        raise ValueError("Invalid payment type. Must be 'annuity' or 'constant amortization'.")
+
+    total_payment = sum(df['principal payment'] + df['interest payment'])
+    remaining_principal = df['remaining principal'].values[-1]
+    return total_payment, remaining_principal
+
 def pay_debt_constant_amortization(principal_payment, principal_left, interest_rate): 
     # Number of months per year
     months_per_year = 12
@@ -286,13 +382,15 @@ app.layout = html.Div(
                 dcc.Dropdown(
                     options=[
                         {'label': 'Monthly payments', 'value': 'payment'},
-                        {'label': 'Interest Rate', 'value': 'interest rate'}
+                        {'label': 'Interest Rate', 'value': 'interest rate'},
+                        {'label': 'Prepayment', 'value': 'prepayment value'},
                     ],
                     value='payment',
                     id='graph-selector',
                     style={
                         'width': '200px',  # Set the width of the dropdown
-                        'height': '50px',
+                        'height': '35px',
+                        #'display': 'inline-block',
                         'margin': '0',  # Align to the left by removing auto margin
                         'color': 'black',
                         'fontSize': '16px',  # Adjust font size
@@ -322,6 +420,7 @@ app.layout = html.Div(
         # Graphs for displaying results
         dcc.Graph(id='payment-graph'),
         dcc.Graph(id='interest-rate-graph', style={'display': 'none'}),  # Initially hidden
+        dcc.Graph(id='prepayment-graph', style={'display': 'none'}),  # Initially hidden
     ],
     style={'padding': '20px'}
 )
@@ -329,8 +428,10 @@ app.layout = html.Div(
 @app.callback(
     Output('payment-graph', 'figure'),
     Output('interest-rate-graph', 'figure'),
+    Output('prepayment-graph', 'figure'),
     Output('payment-graph', 'style'),
     Output('interest-rate-graph', 'style'),
+    Output('prepayment-graph', 'style'),
     [
         Input('graph-selector', 'value'),
         Input('shock-type', 'value'),
@@ -404,11 +505,49 @@ def update_graphs(graph_type, shock_type, tenor, use_smoothing):
         height=600
     )
 
+
+    # prepayment data
+
+    pre = calculate_prepayment_value(100000, (rate[:tenor])/100, 'annuity', 1)
+    pre2 = calculate_prepayment_value(100000, (rate[:tenor])/100, 'constant amortization', 1)
+
+    prepayment_fig = go.Figure()
+    prepayment_fig.add_trace(go.Scatter(
+        x=rate.index[:tenor-1],
+        y=pre[:-1],
+        mode='lines',
+        name='Interest Rate'
+    ))
+    prepayment_fig.add_trace(go.Scatter(
+        x=rate.index[:tenor-1],
+        y=pre2[:-1],
+        mode='lines',
+        name='Interest Rate'
+    ))
+    prepayment_fig.update_layout(
+        title="Effect of 1€ paid on total loan cost per period",
+        xaxis_title="Period",
+        yaxis_title="Rate (€)",
+        plot_bgcolor='rgb(30, 30, 30)',
+        paper_bgcolor='rgb(30, 30, 30)',
+        font=dict(color='white'),
+        template='plotly_dark',
+        margin=dict(t=40, b=40, l=40, r=40),
+        height=600
+    )
+
     # Toggle between graphs
+    # if graph_type == 'payment':
+    #     return payment_fig, rate_fig, {'display': 'block'}, {'display': 'none'}
+    # else:
+    #     return payment_fig, rate_fig, {'display': 'none'}, {'display': 'block'}
+
     if graph_type == 'payment':
-        return payment_fig, rate_fig, {'display': 'block'}, {'display': 'none'}
+        return payment_fig, rate_fig, prepayment_fig, {'display': 'block'}, {'display': 'none'}, {'display': 'none'}
+    elif graph_type == 'interest rate':
+        return payment_fig, rate_fig, prepayment_fig, {'display': 'none'}, {'display': 'block'}, {'display': 'none'}
     else:
-        return payment_fig, rate_fig, {'display': 'none'}, {'display': 'block'}
+        return payment_fig, rate_fig, prepayment_fig, {'display': 'none'}, {'display': 'none'}, {'display': 'block'}
 
 # Run the app
 if __name__ == '__main__':
